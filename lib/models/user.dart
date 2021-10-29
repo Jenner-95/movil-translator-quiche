@@ -1,0 +1,6 @@
+
+
+class User {
+  String username;
+  
+}
