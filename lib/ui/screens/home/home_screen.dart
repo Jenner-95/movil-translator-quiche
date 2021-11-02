@@ -13,10 +13,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   StreamController<String> _streamWritingController = StreamController();
+  TextEditingController _text = TextEditingController();
+  bool checkedValue;
   bool change;
   bool translating;
-  String fromLang;
-  String toLang;
+  int fromLang;
+  int toLang;
+  bool obtenerTraduccion = false;
   final translatorBLoC = TranslatorBloc();
   Responsive _size;
   Stream<String> a;
@@ -24,29 +27,31 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     translating = false;
-    // final debounce = StreamTransformer<String, String>.fromBind(
-    //     (s) => s.debounce(const Duration(milliseconds: 350)));
+    final debounce = StreamTransformer<String, String>.fromBind(
+        (s) => s.debounce(const Duration(milliseconds: 350)));
 
-    // debounce.bind(_streamWritingController.stream).listen((s) {
-    //   print("entro!! $s");
-    //   translating = true;
-    //   _translator(s);
-    // });
+    debounce.bind(_streamWritingController.stream).listen((s) {
+      print("entro!! $s");
+      translating = true;
+      _translator(s);
+    });
 
     _size = new Responsive(context);
     change = false;
-    fromLang = "es";
-    toLang = "en";
+    fromLang = 1;
+    toLang = 2;
+    checkedValue = false;
+
     super.initState();
   }
 
-  // _translator(text) {
-  //   if (translating) {
-  //     translatorBLoC.translator(text);
-  //   } else {
-  //     translatorBLoC.translator("");
-  //   }
-  // }
+  _translator(text) {
+    if (translating) {
+      translatorBLoC.translator(text);
+    } else {
+      translatorBLoC.translator("");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
       ),
       onPressed: () {
-        String aux = fromLang;
+        int aux = fromLang;
         fromLang = toLang;
         toLang = aux;
         translatorBLoC.fromLang(fromLang);
@@ -78,28 +83,23 @@ class _HomeScreenState extends State<HomeScreen> {
             minLines: 1,
             maxLines: 7,
             textCapitalization: TextCapitalization.sentences,
-            onChanged: (string) {
-              if (string.length == 1) {
-                translating = false;
-                translatorBLoC.translator("Escribiendo...");
-              } else if (string.length == 0) {
-                translating = false;
-                translatorBLoC.translator("");
-              }
-              _streamWritingController.add(string);
+            textInputAction: TextInputAction.done,
+            onSubmitted: (string) async {
+              setState(() {
+                obtenerTraduccion = true;
+              });
+              await translatorBLoC.translator(string);
+              setState(() {
+                obtenerTraduccion = false;
+              });
             },
-            onSubmitted: (string) {
-              translatorBLoC.translator(string);
-            },
-            autocorrect: false,
+            // autocorrect: false,
             style: TextStyle(fontSize: 16.0),
             maxLength: 300,
             decoration: InputDecoration.collapsed(hintText: "Ingresa una palabra"),
           ),
         ],
       ),
-          
-      
     );
 
     return SingleChildScrollView(
@@ -114,19 +114,19 @@ class _HomeScreenState extends State<HomeScreen> {
               children: <Widget>[
                 Expanded(
                   child: CupertinoButton(
-                    child: StreamBuilder<String>(
+                    child: StreamBuilder<int>(
                       stream: translatorBLoC.streamFromLang,
-                      initialData: "",
+                      initialData: 0,
                       builder: (context, snapshot) {
                         return Text(
-                          (snapshot.data == "en") ? "Ingles" : "Español",
+                          (snapshot.data == 2) ? "Kiche" : "Español",
                           style: TextStyle(
                             color: Colors.grey[600],
                           ),
                         );
                       },
                     ),
-                    onPressed: () => print(change ? "Ingles" : "Español"),
+                    onPressed: () => print(change ? "Kiche" : "Español"),
                   ),
                 ),
                 Container(
@@ -140,19 +140,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 Expanded(
                   child: CupertinoButton(
-                    child: StreamBuilder<String>(
+                    child: StreamBuilder<int>(
                       stream: translatorBLoC.streamToLang,
-                      initialData: "",
+                      initialData: 0,
                       builder: (context, snapshot) {
                         return Text(
-                          (snapshot.data == "es") ? "Español" : "Inglés",
+                          (snapshot.data == 1) ? "Español" : "Kiche",
                           style: TextStyle(
                             color: Colors.grey[600],
                           ),
                         );
                       },
                     ),
-                    onPressed: () => print(change ? "Ingles" : "Español"),
+                    onPressed: () => print(change ? "Kiche" : "Español"),
                   ),
                 ),
               ],
@@ -161,12 +161,17 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             height: _size.height() * 0.03,
           ),
-          TextButton(
-            style: TextButton.styleFrom(
-              textStyle: const TextStyle(fontSize: 20),
-            ),
-            onPressed: () => null,
-            child: const Text('Traducir'),
+          CheckboxListTile(
+            title: Text("Palabra compuesta"),
+            value: checkedValue,
+            onChanged: (newValue) {
+              print(newValue);
+              setState(() {
+                checkedValue = newValue;
+                translatorBLoC.checkedValue = newValue;
+              });
+            },
+            controlAffinity: ListTileControlAffinity.leading,  //  <-- leading Checkbox
           ),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 15.0),
@@ -179,7 +184,33 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             height: _size.height() * 0.01,
           ),
-          ResultStream(stream: translatorBLoC.streamTranslator)
+          Builder(
+            builder: (context) {
+              while (obtenerTraduccion) {
+                return CircularProgressIndicator();
+              }
+              if (translatorBLoC.imageURL != null) {
+              return Image.network(translatorBLoC.imageURL,fit: BoxFit.fill, height: 150,
+                loadingBuilder:(BuildContext context, Widget child,ImageChunkEvent loadingProgress) {
+                if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null ? 
+                          loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes
+                          : null,
+                    ),
+                  );
+                },
+              );
+                
+              }
+              return Container();
+            }
+          ),
+           SizedBox(
+            height: _size.height() * 0.01,
+          ),
+          ResultStream(stream: translatorBLoC.streamTranslator),          
         ],
       ),
     );
